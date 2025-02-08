@@ -5,10 +5,21 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/yourname/reponame/database"
 	"github.com/yourname/reponame/handlers"
 )
 
 func main() {
+
+	// データベースを初期化
+	if err := database.InitDB(); err != nil {
+		log.Fatalf("Error initializing database: %v", err)
+	}
+	defer database.CloseDB()
+
+	// 実際のアプリケーション処理（例としてログ出力）
+	log.Println("Application is running...")
+
 	r := mux.NewRouter()
 
 	// 各ルートにメソッド制限を追加
