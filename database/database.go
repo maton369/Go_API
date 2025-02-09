@@ -49,39 +49,77 @@ func InitDB() error {
 	}
 	log.Println("Connected to the database successfully")
 
-	// 特定の記事を取得するクエリ
-	articleID := 1
-	const sqlStr = `
-		SELECT article_id, title, contents, username, nice, created_at
+	return nil
+}
+
+// 記事のいいね数を +1 する関数
+func UpdateNiceCount(articleID int) error {
+	// トランザクションの開始
+	tx, err := DB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// 現在のいいね数を取得するクエリ
+	const sqlGetNice = `
+		SELECT nice
 		FROM articles
 		WHERE article_id = ?;
 	`
+	row := tx.QueryRow(sqlGetNice, articleID)
 
-	// クエリ実行（単一記事取得）
-	row := DB.QueryRow(sqlStr, articleID)
+	// 現在のいいね数を取得
+	var nicenum int
+	if err := row.Scan(&nicenum); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to get current nice count: %w", err)
+	}
 
-	var article models.Article
-	var createdTime sql.NullTime
-
-	// データをスキャン
-	err = row.Scan(&article.ID, &article.Title, &article.Contents, &article.UserName, &article.NiceNum, &createdTime)
+	// いいね数を +1 する更新処理
+	const sqlUpdateNice = `
+		UPDATE articles
+		SET nice = ?
+		WHERE article_id = ?;
+	`
+	_, err = tx.Exec(sqlUpdateNice, nicenum+1, articleID)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			log.Println("No article found with the given ID")
-			return nil
-		}
-		return fmt.Errorf("failed to scan row: %w", err)
+		tx.Rollback()
+		return fmt.Errorf("failed to update nice count: %w", err)
 	}
 
-	// NULLチェックを行い、値を設定
-	if createdTime.Valid {
-		article.CreatedAt = createdTime.Time
+	// コミットして処理を確定
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// 結果を出力
-	fmt.Printf("Article: %+v\n", article)
-
+	log.Printf("Nice count updated successfully for article_id: %d", articleID)
 	return nil
+}
+
+func InsertArticle() {
+	// 挿入する記事データ
+	article := models.Article{
+		Title:    "insert test",
+		Contents: "Can I insert data correctly?",
+		UserName: "saki",
+	}
+
+	// SQLクエリ
+	const sqlStr = `
+		INSERT INTO articles (title, contents, username, nice, created_at)
+		VALUES (?, ?, ?, 0, NOW());
+	`
+
+	// データを挿入
+	result, err := DB.Exec(sqlStr, article.Title, article.Contents, article.UserName)
+	if err != nil {
+		log.Fatalf("Failed to insert article: %v", err)
+	}
+
+	// 挿入結果の確認
+	lastInsertID, _ := result.LastInsertId()
+	rowsAffected, _ := result.RowsAffected()
+	fmt.Printf("Article inserted successfully! ID: %d, Rows affected: %d\n", lastInsertID, rowsAffected)
 }
 
 func CloseDB() {

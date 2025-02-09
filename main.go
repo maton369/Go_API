@@ -17,6 +17,10 @@ func main() {
 	}
 	defer database.CloseDB()
 
+	// database.InsertArticle()
+
+	// database.UpdateNiceCount(1)
+
 	// 実際のアプリケーション処理（例としてログ出力）
 	log.Println("Application is running...")
 
