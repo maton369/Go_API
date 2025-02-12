@@ -1,24 +1,16 @@
 package services
 
 import (
-	"fmt"
-
 	"github.com/yourname/reponame/models"
 	"github.com/yourname/reponame/repositories"
 )
 
-// **📝 PostCommentService** (コメント投稿)
-func PostCommentService(comment models.Comment) (models.Comment, error) {
-	db, err := connectDB()
+// PostCommentHandlerで使用することを想定したサービス
+// 引数の情報をもとに新しいコメントを作り、結果を返却
+func (s *MyAppService) PostCommentService(comment models.Comment) (models.Comment, error) {
+	newComment, err := repositories.InsertComment(s.db, comment)
 	if err != nil {
-		return models.Comment{}, fmt.Errorf("❌ [Service: PostCommentService] データベース接続に失敗しました: %w", err)
-	}
-	defer db.Close()
-
-	// コメントをデータベースに挿入
-	newComment, err := repositories.InsertComment(db, comment)
-	if err != nil {
-		return models.Comment{}, fmt.Errorf("❌ [Service: PostCommentService] コメントの投稿に失敗しました: %w", err)
+		return models.Comment{}, err
 	}
 
 	return newComment, nil

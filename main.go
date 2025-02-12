@@ -1,25 +1,55 @@
 package main
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 
-	"github.com/gorilla/mux"
-	"github.com/yourname/reponame/handlers"
+	"github.com/joho/godotenv"
+	"github.com/yourname/reponame/api"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
+// **環境変数をロード**
+func loadEnv() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatalf("❌ .env ファイルの読み込みに失敗しました: %v", err)
+	}
+	log.Println("✅ .env ファイルを読み込みました")
+}
+
 func main() {
-	r := mux.NewRouter()
+	// **環境変数をロード**
+	loadEnv()
 
-	r.HandleFunc("/hello", handlers.HelloHandler).Methods(http.MethodGet)
+	// **環境変数から DB 接続情報を取得**
+	dbUser := os.Getenv("USERNAME")
+	dbPassword := os.Getenv("USERPASS")
+	dbDatabase := os.Getenv("DATABASE")
+	dbHost := os.Getenv("DB_HOST")
 
-	r.HandleFunc("/article", handlers.PostArticleHandler).Methods(http.MethodPost)
-	r.HandleFunc("/article/list", handlers.ArticleListHandler).Methods(http.MethodGet)
-	r.HandleFunc("/article/{id:[0-9]+}", handlers.ArticleDetailHandler).Methods(http.MethodGet)
-	r.HandleFunc("/article/nice", handlers.PostNiceHandler).Methods(http.MethodPost)
+	// **必須の環境変数が設定されているかチェック**
+	if dbUser == "" || dbPassword == "" || dbDatabase == "" || dbHost == "" {
+		log.Fatalf("❌ 必須の環境変数が設定されていません")
+	}
 
-	r.HandleFunc("/comment", handlers.PostCommentHandler).Methods(http.MethodPost)
+	// **DB 接続情報をフォーマット**
+	dbConn := fmt.Sprintf("%s:%s@tcp(%s:3306)/%s?parseTime=true", dbUser, dbPassword, dbHost, dbDatabase)
 
-	log.Println("server start at port 8080")
+	// **DB に接続**
+	db, err := sql.Open("mysql", dbConn)
+	if err != nil {
+		log.Fatalf("❌ データベース接続エラー: %v", err)
+	}
+	defer db.Close()
+
+	r := api.NewRouter(db)
+
+	// **サーバー起動**
+	log.Println("✅ サーバー起動: http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
