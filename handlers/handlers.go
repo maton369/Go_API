@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/yourname/reponame/models"
+	"github.com/yourname/reponame/services"
 )
 
 // GET /hello のハンドラ
@@ -14,102 +16,119 @@ func HelloHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("Hello, world!\n"))
 }
 
-// POST /article のハンドラ
+// **📝 POST /article**
 func PostArticleHandler(w http.ResponseWriter, req *http.Request) {
 	var reqArticle models.Article
 
-	// リクエストボディをJSONデコード
+	// **リクエストボディのデコード**
 	if err := json.NewDecoder(req.Body).Decode(&reqArticle); err != nil {
-		http.Error(w, "Failed to decode JSON", http.StatusBadRequest)
+		log.Printf("❌ JSONのデコードに失敗しました: %v", err)
+		http.Error(w, "❌ JSONのデコードに失敗しました", http.StatusBadRequest)
 		return
 	}
 	defer req.Body.Close()
 
-	// JSONエンコードしてレスポンス
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(reqArticle); err != nil {
-		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+	// **サービス層を呼び出す**
+	newArticle, err := services.PostArticleService(reqArticle)
+	if err != nil {
+		log.Printf("❌ 記事の投稿に失敗しました: %v", err)
+		http.Error(w, "❌ 記事の投稿処理中にエラーが発生しました", http.StatusInternalServerError)
+		return
 	}
+
+	// **レスポンスをJSONで返す**
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(newArticle)
 }
 
-// GET /article/list のハンドラ
+// **📝 GET /article/list**
 func ArticleListHandler(w http.ResponseWriter, req *http.Request) {
-	articles := []models.Article{models.Article1, models.Article2}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(articles); err != nil {
-		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+	page, err := strconv.Atoi(req.URL.Query().Get("page"))
+	if err != nil || page < 1 {
+		page = 1 // デフォルトのページ番号
 	}
+
+	// **サービス層を呼び出す**
+	articles, err := services.GetArticleListService(page)
+	if err != nil {
+		log.Printf("❌ 記事一覧の取得に失敗しました: %v", err)
+		http.Error(w, "❌ 記事一覧の取得中にエラーが発生しました", http.StatusInternalServerError)
+		return
+	}
+
+	// **レスポンスをJSONで返す**
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(articles)
 }
 
-// GET /article/{id} のハンドラ
+// **📝 GET /article/{id}**
 func ArticleDetailHandler(w http.ResponseWriter, req *http.Request) {
 	articleID, err := strconv.Atoi(mux.Vars(req)["id"])
 	if err != nil {
-		http.Error(w, "Invalid article ID", http.StatusBadRequest)
+		log.Printf("❌ 記事IDが無効です: %v", err)
+		http.Error(w, "❌ 記事IDが無効です", http.StatusBadRequest)
 		return
 	}
 
-	var article *models.Article
-	if articleID == models.Article1.ID {
-		article = &models.Article1
-	} else if articleID == models.Article2.ID {
-		article = &models.Article2
-	} else {
-		http.Error(w, "Article not found", http.StatusNotFound)
+	// **サービス層を呼び出す**
+	article, err := services.GetArticleService(articleID)
+	if err != nil {
+		log.Printf("❌ 記事の取得に失敗しました: %v", err)
+		http.Error(w, "❌ 記事の取得中にエラーが発生しました", http.StatusInternalServerError)
 		return
 	}
 
+	// **レスポンスをJSONで返す**
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(article); err != nil {
-		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
-	}
+	json.NewEncoder(w).Encode(article)
 }
 
-// POST /article/nice のハンドラ
+// **📝 POST /article/nice**
 func PostNiceHandler(w http.ResponseWriter, req *http.Request) {
 	var reqArticle models.Article
 
-	// リクエストボディをデコード
+	// **リクエストボディのデコード**
 	if err := json.NewDecoder(req.Body).Decode(&reqArticle); err != nil {
-		http.Error(w, "Failed to decode JSON", http.StatusBadRequest)
+		log.Printf("❌ JSONのデコードに失敗しました: %v", err)
+		http.Error(w, "❌ JSONのデコードに失敗しました", http.StatusBadRequest)
 		return
 	}
 	defer req.Body.Close()
 
-	// 該当する記事の NiceNum をインクリメント
-	if reqArticle.ID == models.Article1.ID {
-		models.Article1.NiceNum++
-		reqArticle = models.Article1
-	} else if reqArticle.ID == models.Article2.ID {
-		models.Article2.NiceNum++
-		reqArticle = models.Article2
-	} else {
-		http.Error(w, "Article not found", http.StatusNotFound)
+	// **サービス層を呼び出す**
+	updatedArticle, err := services.PostNiceService(reqArticle.ID)
+	if err != nil {
+		log.Printf("❌ いいねの更新に失敗しました: %v", err)
+		http.Error(w, "❌ いいねの更新中にエラーが発生しました", http.StatusInternalServerError)
 		return
 	}
 
-	// JSONエンコードしてレスポンス
+	// **レスポンスをJSONで返す**
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(reqArticle); err != nil {
-		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
-	}
+	json.NewEncoder(w).Encode(updatedArticle)
 }
 
-// POST /comment のハンドラ
+// **📝 POST /comment**
 func PostCommentHandler(w http.ResponseWriter, req *http.Request) {
 	var reqComment models.Comment
 
-	// リクエストボディをデコード
+	// **リクエストボディのデコード**
 	if err := json.NewDecoder(req.Body).Decode(&reqComment); err != nil {
-		http.Error(w, "Failed to decode JSON", http.StatusBadRequest)
+		log.Printf("❌ JSONのデコードに失敗しました: %v", err)
+		http.Error(w, "❌ JSONのデコードに失敗しました", http.StatusBadRequest)
 		return
 	}
 	defer req.Body.Close()
 
-	// コメントデータのレスポンス
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(reqComment); err != nil {
-		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+	// **サービス層を呼び出してコメントをDBに追加**
+	newComment, err := services.PostCommentService(reqComment)
+	if err != nil {
+		log.Printf("❌ コメントの投稿に失敗しました: %v", err)
+		http.Error(w, "❌ コメントの投稿処理中にエラーが発生しました", http.StatusInternalServerError)
+		return
 	}
+
+	// **レスポンスをJSONで返す**
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(newComment)
 }
