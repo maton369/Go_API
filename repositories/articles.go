@@ -2,115 +2,121 @@ package repositories
 
 import (
 	"database/sql"
-	"fmt"
-	"log"
 
 	"github.com/yourname/reponame/models"
 )
 
+const (
+	articleNumPerPage = 5
+)
+
+// 新規投稿をDBにinsertする関数
 func InsertArticle(db *sql.DB, article models.Article) (models.Article, error) {
 	const sqlStr = `
-		INSERT INTO articles (title, contents, username, nice, created_at)
-		VALUES (?, ?, ?, 0, NOW());
+	insert into articles (title, contents, username, nice, created_at) values
+	(?, ?, ?, 0, now());
 	`
+
+	var newArticle models.Article
+	newArticle.Title, newArticle.Contents, newArticle.UserName = article.Title, article.Contents, article.UserName
+
 	result, err := db.Exec(sqlStr, article.Title, article.Contents, article.UserName)
 	if err != nil {
-		return models.Article{}, fmt.Errorf("failed to insert article: %w", err)
+		return models.Article{}, err
 	}
 
-	lastInsertID, _ := result.LastInsertId()
-	article.ID = int(lastInsertID)
-	return article, nil
+	id, _ := result.LastInsertId()
+
+	newArticle.ID = int(id)
+
+	return newArticle, nil
 }
 
+// 投稿一覧をDBから取得する関数
 func SelectArticleList(db *sql.DB, page int) ([]models.Article, error) {
 	const sqlStr = `
-		SELECT article_id, title, contents, username, nice, created_at
-		FROM articles
-		LIMIT ? OFFSET ?;
+		select article_id, title, contents, username, nice
+		from articles
+		limit ? offset ?;
 	`
-	limit := 5
-	offset := (page - 1) * limit
 
-	rows, err := db.Query(sqlStr, limit, offset)
+	rows, err := db.Query(sqlStr, articleNumPerPage, ((page - 1) * articleNumPerPage))
 	if err != nil {
-		return nil, fmt.Errorf("failed to select article list: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
-	var articleArray []models.Article
+	articleArray := make([]models.Article, 0)
 	for rows.Next() {
 		var article models.Article
-		var createdTime sql.NullTime
-		if err := rows.Scan(&article.ID, &article.Title, &article.Contents, &article.UserName, &article.NiceNum, &createdTime); err != nil {
-			log.Println("Error scanning row:", err)
-			continue
-		}
-		if createdTime.Valid {
-			article.CreatedAt = createdTime.Time
-		}
-		articleArray = append(articleArray, article)
-	}
+		rows.Scan(&article.ID, &article.Title, &article.Contents, &article.UserName, &article.NiceNum)
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("row iteration error: %w", err)
+		articleArray = append(articleArray, article)
 	}
 
 	return articleArray, nil
 }
 
+// 投稿IDを指定して、記事データを取得する関数
 func SelectArticleDetail(db *sql.DB, articleID int) (models.Article, error) {
 	const sqlStr = `
-		SELECT article_id, title, contents, username, nice, created_at
-		FROM articles
-		WHERE article_id = ?;
+		select *
+		from articles
+		where article_id = ?;
 	`
+	row := db.QueryRow(sqlStr, articleID)
+	if err := row.Err(); err != nil {
+		return models.Article{}, err
+	}
+
 	var article models.Article
 	var createdTime sql.NullTime
-
-	row := db.QueryRow(sqlStr, articleID)
 	err := row.Scan(&article.ID, &article.Title, &article.Contents, &article.UserName, &article.NiceNum, &createdTime)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return models.Article{}, fmt.Errorf("article not found")
-		}
-		return models.Article{}, fmt.Errorf("failed to select article detail: %w", err)
+		return models.Article{}, err
 	}
 
 	if createdTime.Valid {
 		article.CreatedAt = createdTime.Time
 	}
+
 	return article, nil
 }
 
+// いいねの数をupdateする関数
 func UpdateNiceNum(db *sql.DB, articleID int) error {
 	tx, err := db.Begin()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return err
 	}
 
 	const sqlGetNice = `
-		SELECT nice
-		FROM articles
-		WHERE article_id = ?;
+		select nice
+		from articles
+		where article_id = ?;
 	`
-	var nicenum int
 	row := tx.QueryRow(sqlGetNice, articleID)
-	if err := row.Scan(&nicenum); err != nil {
+	if err := row.Err(); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to get current nice count: %w", err)
+		return err
 	}
 
-	const sqlUpdateNice = `
-		UPDATE articles
-		SET nice = ?
-		WHERE article_id = ?;
-	`
+	var nicenum int
+	err = row.Scan(&nicenum)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	const sqlUpdateNice = `update articles set nice = ? where article_id = ?`
 	_, err = tx.Exec(sqlUpdateNice, nicenum+1, articleID)
 	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to update nice count: %w", err)
+		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
