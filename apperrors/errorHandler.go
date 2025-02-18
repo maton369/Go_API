@@ -6,7 +6,8 @@ import (
 	"net/http"
 )
 
-func ErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+// エラーが発生したときのレスポンス処理をここで一括で行う
+func ErrorHandler(w http.ResponseWriter, req *http.Request, err error) {
 	var appErr *MyAppError
 	if !errors.As(err, &appErr) {
 		appErr = &MyAppError{
@@ -15,7 +16,9 @@ func ErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 			Err:     err,
 		}
 	}
+
 	var statusCode int
+
 	switch appErr.ErrCode {
 	case NAData:
 		statusCode = http.StatusNotFound
@@ -24,7 +27,7 @@ func ErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	default:
 		statusCode = http.StatusInternalServerError
 	}
+
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(appErr)
-
 }
